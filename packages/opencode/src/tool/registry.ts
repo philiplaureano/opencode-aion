@@ -6,6 +6,12 @@ import { GrepTool } from "./grep"
 import { BatchTool } from "./batch"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
+import { TaskOutputTool } from "./task-output"
+import { TaskWaitForNTool } from "./task-wait-for-n"
+import { TaskWaitAllTool } from "./task-wait-all"
+import { TaskWaitAnyTool } from "./task-wait-any"
+import { TaskListTool } from "./task-list"
+import { KillTaskTool } from "./kill-task"
 import { TodoWriteTool, TodoReadTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
@@ -103,6 +109,12 @@ export namespace ToolRegistry {
       EditTool,
       WriteTool,
       TaskTool,
+      TaskOutputTool,
+      TaskWaitForNTool,
+      TaskWaitAllTool,
+      TaskWaitAnyTool,
+      TaskListTool,
+      KillTaskTool,
       WebFetchTool,
       TodoWriteTool,
       TodoReadTool,
