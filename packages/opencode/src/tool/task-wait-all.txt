@@ -1,0 +1,41 @@
+Wait for ALL background tasks to complete.
+
+This is a convenience wrapper around TaskWaitForN that waits for all specified tasks.
+
+Parameters:
+- task_ids: Array of task IDs to wait on (required, at least 1)
+- timeout: Maximum wait time in milliseconds (default 300000 = 5 minutes, max 600000)
+
+Returns:
+- All task results (completed, failed, cancelled, or not_found)
+- Timed out task IDs if timeout was reached
+
+Equivalent to: TaskWaitForN(task_ids, min_items=task_ids.length, timeout)
+
+---
+
+## Scatter/Gather Pattern
+
+With 128 concurrent slots, you can fan out significant parallel work:
+
+```
+# SCATTER: Launch 20 parallel investigations
+task_ids = []
+for module in modules_to_investigate:
+    task_ids.append(Task(
+        subagent_type="explore",
+        prompt=f"Investigate {module}",
+        run_in_background=true
+    ))
+
+# GATHER: Wait for all to complete
+results = TaskWaitAll(task_ids)
+
+# SYNTHESIZE: Combine findings
+for result in results.completed:
+    integrate_findings(result)
+```
+
+When to use TaskWaitAll vs TaskWaitForN:
+- **TaskWaitAll**: You need every result (comprehensive analysis)
+- **TaskWaitForN**: You can proceed with partial results (quorum, tail chop)

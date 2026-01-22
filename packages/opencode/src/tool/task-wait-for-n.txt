@@ -1,0 +1,89 @@
+Wait for a minimum number of background tasks to complete.
+
+This tool blocks until at least N tasks from the provided list complete (succeed, fail, or are cancelled), or until timeout is reached.
+
+Use this to:
+- Wait for N out of M parallel tasks to finish before continuing
+- Implement "wait for all" by setting min_items = task_ids.length
+- Implement "wait for any" by setting min_items = 1
+- Get batch results from multiple background tasks efficiently
+
+Parameters:
+- task_ids: Array of task IDs to monitor (required, at least 1)
+- min_items: Minimum number of tasks to wait for (required)
+- timeout: Maximum wait time in milliseconds (default 300000 = 5 minutes, max 600000)
+
+Returns:
+- Completed tasks with their output (truncated if large)
+- List of tasks still running (if min_items reached before all complete)
+- List of tasks that timed out (if timeout was hit)
+
+Notes:
+- Non-existent task IDs are immediately marked as "not_found"
+- Already-completed tasks are included immediately
+- Uses event-based waiting (efficient, no polling)
+- Outputs are automatically truncated to prevent context overflow
+
+---
+
+## Advanced Patterns (With 128 Concurrent Slots)
+
+This is the **core primitive** for parallel orchestration. TaskWaitAll and TaskWaitAny are convenience wrappers.
+
+### Quorum (M of N Agreement)
+
+When you need consensus or majority agreement:
+```
+# Launch 5 investigators
+task_ids = [Task(..., run_in_background=true) for 5 different approaches]
+
+# Wait for 3 to agree (majority quorum)
+TaskWaitForN(task_ids, min_items=3)
+
+# Proceed with majority opinion, ignore stragglers
+```
+
+Use case: Multiple agents analyzing the same problem - proceed when enough converge.
+
+### Scatter/Gather
+
+Fan out work, collect all results:
+```
+# Scatter: Launch 20 parallel investigations
+task_ids = [Task(investigate_module_i, run_in_background=true) for i in 1..20]
+
+# Gather: Wait for all
+TaskWaitForN(task_ids, min_items=20)  # Or use TaskWaitAll
+
+# Synthesize combined results
+```
+
+Use case: Exploring a large codebase in parallel.
+
+### Tail Chop (Discard Slowest)
+
+When stragglers aren't worth waiting for:
+```
+# Launch 10 tasks
+task_ids = [Task(..., run_in_background=true) for 10 tasks]
+
+# Wait for 8, discard slowest 2
+TaskWaitForN(task_ids, min_items=8)
+
+# Proceed without the laggards
+```
+
+Use case: Time-sensitive operations where 80% completion is good enough.
+
+### Progressive Results
+
+Process results as they arrive:
+```
+remaining = all_task_ids
+while remaining:
+    result = TaskWaitForN(remaining, min_items=1)  # Wait for next
+    process(result)
+    remaining = result.still_running
+```
+
+Use case: Streaming updates to user as investigations complete.

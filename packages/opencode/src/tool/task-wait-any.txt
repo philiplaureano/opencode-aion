@@ -1,0 +1,41 @@
+Wait for ANY ONE background task to complete.
+
+This is a convenience wrapper around TaskWaitForN that returns as soon as any task finishes.
+
+Parameters:
+- task_ids: Array of task IDs to wait on (required, at least 1)
+- timeout: Maximum wait time in milliseconds (default 300000 = 5 minutes, max 600000)
+
+Returns:
+- The first completed task result (completed, failed, cancelled, or not_found)
+- List of tasks still running
+- Timed out indicator if timeout was reached before any task completed
+
+Equivalent to: TaskWaitForN(task_ids, min_items=1, timeout)
+
+---
+
+## Racing Pattern (First Wins)
+
+When you want the fastest answer, not necessarily every answer:
+
+```
+# Launch multiple approaches in parallel
+task_ids = [
+    Task(subagent_type="explore", prompt="Find via grep...", run_in_background=true),
+    Task(subagent_type="explore", prompt="Find via AST...", run_in_background=true),
+    Task(subagent_type="explore", prompt="Find via git log...", run_in_background=true),
+]
+
+# First one to finish wins
+winner = TaskWaitAny(task_ids)
+
+# Use the winner's result, others continue in background (or cancel them)
+```
+
+Use cases:
+- **Speculative execution**: Try multiple strategies, use first success
+- **Redundant queries**: Ask same question different ways, fastest wins
+- **Fallback chains**: Try preferred approach, fall back if slow
+
+Note: Other tasks keep running unless explicitly cancelled via KillTask.

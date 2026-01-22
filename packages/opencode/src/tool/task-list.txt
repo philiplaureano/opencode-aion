@@ -1,0 +1,14 @@
+List all background tasks in the current session.
+
+Returns a formatted list of all tasks with their:
+- Task ID
+- Status (queued, running, completed, error, cancelled)
+- Agent type
+- Description
+- Duration (if applicable)
+
+Use this to:
+- See what tasks are currently running
+- Find task IDs for use with TaskOutput or TaskWaitForN
+- Monitor overall task progress
+- Identify failed or cancelled tasks

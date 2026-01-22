@@ -1,0 +1,14 @@
+Retrieves output from a running or completed background task.
+
+Use this to:
+- Check if a background task is still running
+- Get the current status of a task
+- Retrieve final results when task completes
+
+Parameters:
+- task_id: The task ID returned when starting a background task (required)
+- block: If true (default), wait for task completion. If false, return current status immediately.
+- timeout: Maximum wait time in milliseconds (default 30000, max 600000)
+
+Returns the task status and output. If the task is still running and block=true,
+waits until completion or timeout.

@@ -1,0 +1,3 @@
+Kills a running or queued background task by its ID.
+
+Use this to cancel a background task that is no longer needed.
