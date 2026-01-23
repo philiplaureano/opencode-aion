@@ -3,11 +3,18 @@ import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import path from "path"
 import os from "os"
 
-const app = "opencode"
+function getStorageNamespace(): string {
+  const binaryName = path.basename(process.argv[0])
+    .replace(/\.exe$/i, '');
+  // Strip date suffix: "opencode-aion-2026-01-23" → "opencode-aion"
+  return binaryName.replace(/-\d{4}-\d{2}-\d{2}$/, '') || 'opencode';
+}
+
+const app = getStorageNamespace()
 
 const data = path.join(xdgData!, app)
 const cache = path.join(xdgCache!, app)
-const config = path.join(xdgConfig!, app)
+const config = path.join(xdgConfig!, "opencode")  // Config stays shared
 const state = path.join(xdgState!, app)
 
 export namespace Global {
