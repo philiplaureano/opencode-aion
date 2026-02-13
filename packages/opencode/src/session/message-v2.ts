@@ -1,3 +1,4 @@
+import type { Bus } from "@/bus"
 import { BusEvent } from "@/bus/bus-event"
 import z from "zod"
 import { NamedError } from "@opencode-ai/util/error"
@@ -163,6 +164,30 @@ export namespace MessageV2 {
     ref: "CompactionPart",
   })
   export type CompactionPart = z.infer<typeof CompactionPart>
+
+  /**
+   * AgentNotificationPart - Background task lifecycle notification
+   * 
+   * Emitted at 5 lifecycle points:
+   * - queued: Task accepted and queued
+   * - started: Execution began
+   * - completed: Finished successfully
+   * - failed: Error occurred
+   * - cancelled: Explicitly cancelled
+   * 
+   * Design: Minimal schema, idempotent across repeated emissions.
+   */
+  export const AgentNotificationPart = PartBase.extend({
+    type: z.literal("agentNotification"),
+    taskID: z.string(),
+    event: z.enum(["queued", "started", "completed", "failed", "cancelled"]),
+    timestamp: z.string().optional(), // ISO8601 for audit trail
+    details: z.object({
+      message: z.string().optional(),
+      error: z.string().optional(),
+    }).optional(),
+  })
+  export type AgentNotificationPart = z.infer<typeof AgentNotificationPart>
 
   export const SubtaskPart = PartBase.extend({
     type: z.literal("subtask"),
@@ -340,6 +365,7 @@ export namespace MessageV2 {
       PatchPart,
       AgentPart,
       RetryPart,
+      AgentNotificationPart,
       CompactionPart,
     ])
     .meta({
@@ -423,6 +449,19 @@ export namespace MessageV2 {
         sessionID: z.string(),
         messageID: z.string(),
         partID: z.string(),
+      }),
+    ),
+    BackgroundTaskUpdate: BusEvent.define(
+      "background-task.update",
+      z.object({
+        sessionID: z.string(),
+        messageID: z.string(),
+        taskID: z.string(),
+        event: z.enum(["queued", "started", "completed", "failed", "cancelled"]),
+        details: z.object({
+          message: z.string().optional(),
+          error: z.string().optional(),
+        }).optional(),
       }),
     ),
   }
@@ -736,5 +775,48 @@ export namespace MessageV2 {
       default:
         return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e })
     }
+
+  /**
+   * Emit background task lifecycle notification
+   * 
+   * Appends AgentNotificationPart to the message and emits BackgroundTaskUpdate event.
+   * Idempotent: Safe to call multiple times for same event.
+   * 
+   * @param bus - Event bus
+   * @param session - Session instance with updatePart
+   * @param messageID - Target message
+   * @param taskID - Background task ID
+   * @param event - Lifecycle event
+   * @param details - Optional message/error details
+   */
+  export function emitBackgroundTaskNotification(
+    bus: Bus,
+    session: { updatePart: (messageID: string, fn: (parts: Part[]) => Part[]) => void },
+    messageID: string,
+    taskID: string,
+    event: "queued" | "started" | "completed" | "failed" | "cancelled",
+    details?: { message?: string; error?: string },
+  ): void {
+    // Append notification part to message
+    session.updatePart(messageID, (parts) => [
+      ...parts,
+      {
+        type: "agentNotification" as const,
+        partID: crypto.randomUUID(),
+        taskID,
+        event,
+        timestamp: new Date().toISOString(),
+        details,
+      },
+    ])
+
+    // Emit bus event for real-time subscribers
+    bus.emit(MessageV2.Event.BackgroundTaskUpdate, {
+      sessionID: messageID.split("-")[0] || "", // Extract from messageID convention
+      messageID,
+      taskID,
+      event,
+      details,
+    })
   }
 }
