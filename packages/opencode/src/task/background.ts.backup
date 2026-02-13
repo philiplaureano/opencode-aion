@@ -13,7 +13,6 @@ export namespace BackgroundTask {
     id: z.string().startsWith("tsk_"),
     type: z.enum(["task", "bash"]).default("task"),
     sessionID: z.string(),           // Parent session that spawned this
-    messageID: z.string(),           // Message to append notifications to
 
     // Task-specific fields (optional for bash tasks)
     childSessionID: z.string().optional(),  // The subagent's own session

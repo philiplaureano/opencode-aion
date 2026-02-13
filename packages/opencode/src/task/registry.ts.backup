@@ -4,8 +4,6 @@ import { BackgroundTask } from "./background"
 import { SessionPrompt } from "../session/prompt"
 import { Log } from "../util/log"
 import { Shell } from "../shell/shell"
-import { MessageV2 } from "../session/message-v2"
-import { Session } from "../session"
 
 export namespace TaskRegistry {
   const log = Log.create({ service: "task.registry" })
