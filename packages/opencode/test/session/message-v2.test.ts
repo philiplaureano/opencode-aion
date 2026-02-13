@@ -784,3 +784,172 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 })
+
+describe("emitBackgroundTaskNotification", () => {
+  const mockSession = {
+    updatePart: mock(() => {}),
+  }
+
+  beforeEach(() => {
+    mockSession.updatePart.mockClear()
+  })
+
+  test("should create AgentNotificationPart with correct structure", () => {
+    const { emitBackgroundTaskNotification } = require("../../src/session/message-v2")
+    const sessionUse = spyOn(require("../../src/session"), "Session").mockReturnValue({
+      use: () => mockSession,
+    })
+
+    emitBackgroundTaskNotification(
+      "session_123",
+      "msg_456",
+      "tsk_789",
+      "started"
+    )
+
+    expect(mockSession.updatePart).toHaveBeenCalledTimes(1)
+    const [messageID, part] = mockSession.updatePart.mock.calls[0]
+    
+    expect(messageID).toBe("msg_456")
+    expect(part).toMatchObject({
+      type: "agentNotification",
+      sessionID: "session_123",
+      messageID: "msg_456",
+      taskID: "tsk_789",
+      event: "started",
+    })
+    expect(part.id).toMatch(/^notif_/)
+
+    sessionUse.mockRestore()
+  })
+
+  test("should include details when provided", () => {
+    const { emitBackgroundTaskNotification } = require("../../src/session/message-v2")
+    const sessionUse = spyOn(require("../../src/session"), "Session").mockReturnValue({
+      use: () => mockSession,
+    })
+
+    const details = { message: "Task completed successfully" }
+    
+    emitBackgroundTaskNotification(
+      "session_123",
+      "msg_456",
+      "tsk_789",
+      "completed",
+      details
+    )
+
+    const [, part] = mockSession.updatePart.mock.calls[0]
+    expect(part.details).toEqual(details)
+
+    sessionUse.mockRestore()
+  })
+
+  test("should include error details", () => {
+    const { emitBackgroundTaskNotification } = require("../../src/session/message-v2")
+    const sessionUse = spyOn(require("../../src/session"), "Session").mockReturnValue({
+      use: () => mockSession,
+    })
+
+    const details = { error: "Task failed with error" }
+    
+    emitBackgroundTaskNotification(
+      "session_123",
+      "msg_456",
+      "tsk_789",
+      "failed",
+      details
+    )
+
+    const [, part] = mockSession.updatePart.mock.calls[0]
+    expect(part.details).toEqual(details)
+
+    sessionUse.mockRestore()
+  })
+
+  test("should omit details when not provided", () => {
+    const { emitBackgroundTaskNotification } = require("../../src/session/message-v2")
+    const sessionUse = spyOn(require("../../src/session"), "Session").mockReturnValue({
+      use: () => mockSession,
+    })
+
+    emitBackgroundTaskNotification(
+      "session_123",
+      "msg_456",
+      "tsk_789",
+      "queued"
+    )
+
+    const [, part] = mockSession.updatePart.mock.calls[0]
+    expect(part.details).toBeUndefined()
+
+    sessionUse.mockRestore()
+  })
+
+  test("should omit details when empty object provided", () => {
+    const { emitBackgroundTaskNotification } = require("../../src/session/message-v2")
+    const sessionUse = spyOn(require("../../src/session"), "Session").mockReturnValue({
+      use: () => mockSession,
+    })
+
+    emitBackgroundTaskNotification(
+      "session_123",
+      "msg_456",
+      "tsk_789",
+      "cancelled",
+      {}
+    )
+
+    const [, part] = mockSession.updatePart.mock.calls[0]
+    expect(part.details).toBeUndefined()
+
+    sessionUse.mockRestore()
+  })
+
+  test("should generate unique notification IDs", () => {
+    const { emitBackgroundTaskNotification } = require("../../src/session/message-v2")
+    const sessionUse = spyOn(require("../../src/session"), "Session").mockReturnValue({
+      use: () => mockSession,
+    })
+
+    emitBackgroundTaskNotification("session_1", "msg_1", "tsk_1", "queued")
+    emitBackgroundTaskNotification("session_1", "msg_1", "tsk_1", "started")
+
+    expect(mockSession.updatePart).toHaveBeenCalledTimes(2)
+    
+    const part1 = mockSession.updatePart.mock.calls[0][1]
+    const part2 = mockSession.updatePart.mock.calls[1][1]
+    
+    expect(part1.id).not.toBe(part2.id)
+    expect(part1.id).toMatch(/^notif_/)
+    expect(part2.id).toMatch(/^notif_/)
+
+    sessionUse.mockRestore()
+  })
+
+  test("should handle all event types", () => {
+    const { emitBackgroundTaskNotification } = require("../../src/session/message-v2")
+    const sessionUse = spyOn(require("../../src/session"), "Session").mockReturnValue({
+      use: () => mockSession,
+    })
+
+    const events = ["queued", "started", "completed", "failed", "cancelled"] as const
+    
+    events.forEach((event, index) => {
+      emitBackgroundTaskNotification(
+        "session_test",
+        "msg_test",
+        "tsk_test",
+        event
+      )
+
+      const [messageID, part] = mockSession.updatePart.mock.calls[index]
+      expect(messageID).toBe("msg_test")
+      expect(part.event).toBe(event)
+    })
+
+    expect(mockSession.updatePart).toHaveBeenCalledTimes(5)
+
+    sessionUse.mockRestore()
+  })
+})
