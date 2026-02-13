@@ -782,41 +782,47 @@ export namespace MessageV2 {
    * Appends AgentNotificationPart to the message and emits BackgroundTaskUpdate event.
    * Idempotent: Safe to call multiple times for same event.
    * 
-   * @param bus - Event bus
-   * @param session - Session instance with updatePart
-   * @param messageID - Target message
-   * @param taskID - Background task ID
-   * @param event - Lifecycle event
-   * @param details - Optional message/error details
+   * @param params - Notification parameters
+   * @param params.sessionID - Parent session ID (explicit)
+   * @param params.messageID - Target message
+   * @param params.taskID - Background task ID
+   * @param params.event - Lifecycle event
+   * @param params.details - Optional message/error details
    */
-  export function emitBackgroundTaskNotification(
-    bus: Bus,
-    session: { updatePart: (messageID: string, fn: (parts: Part[]) => Part[]) => void },
-    messageID: string,
-    taskID: string,
-    event: "queued" | "started" | "completed" | "failed" | "cancelled",
-    details?: { message?: string; error?: string },
-  ): void {
+  export async function emitBackgroundTaskNotification(params: {
+    sessionID: string;
+    messageID: string;
+    taskID: string;
+    event: "queued" | "started" | "completed" | "failed" | "cancelled";
+    details?: { message?: string; error?: string };
+  }): Promise<void> {
+    // Import Session dynamically to get current session instance
+    const { Session } = await import("../session")
+    const session = Session.use()
+
     // Append notification part to message
-    session.updatePart(messageID, (parts) => [
+    session.updatePart(params.messageID, (parts) => [
       ...parts,
       {
         type: "agentNotification" as const,
-        partID: crypto.randomUUID(),
-        taskID,
-        event,
+        id: crypto.randomUUID(),
+        sessionID: params.sessionID,
+        messageID: params.messageID,
+        taskID: params.taskID,
+        event: params.event,
         timestamp: new Date().toISOString(),
-        details,
+        details: params.details,
       },
     ])
 
     // Emit bus event for real-time subscribers
-    bus.emit(MessageV2.Event.BackgroundTaskUpdate, {
-      sessionID: messageID.split("-")[0] || "", // Extract from messageID convention
-      messageID,
-      taskID,
-      event,
-      details,
+    const { Bus } = await import("../bus")
+    Bus.emit(MessageV2.Event.BackgroundTaskUpdate, {
+      sessionID: params.sessionID,
+      messageID: params.messageID,
+      taskID: params.taskID,
+      event: params.event,
+      details: params.details,
     })
   }
 }
