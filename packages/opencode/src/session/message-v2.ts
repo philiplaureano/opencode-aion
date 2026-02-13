@@ -775,6 +775,7 @@ export namespace MessageV2 {
       default:
         return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e })
     }
+  }
 
   /**
    * Emit background task lifecycle notification
@@ -826,3 +827,6 @@ export namespace MessageV2 {
     })
   }
 }
+
+// Re-export for standalone usage
+export const emitBackgroundTaskNotification = MessageV2.emitBackgroundTaskNotification

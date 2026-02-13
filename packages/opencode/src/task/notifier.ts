@@ -27,14 +27,18 @@ const eventMapping = {
 } as const
 
 /**
- * Initialize TaskNotifier by subscribing to all BackgroundTask events.
- *
- * MUST be called exactly once during application startup.
- * Safe to call multiple times (no-op after first initialization).
+ * TaskNotifier namespace for background task notification handling
  */
-let initialized = false
+export namespace TaskNotifier {
+  /**
+   * Initialize TaskNotifier by subscribing to all BackgroundTask events.
+   *
+   * MUST be called exactly once during application startup.
+   * Safe to call multiple times (no-op after first initialization).
+   */
+  let initialized = false
 
-export function initialize() {
+  export function initialize() {
   if (initialized) {
     log.debug("TaskNotifier already initialized, skipping")
     return
@@ -56,7 +60,7 @@ export function initialize() {
       try {
         await handleTaskEvent(eventType, data as BackgroundTask.Info)
       } catch (error) {
-        log.error(\`Failed to handle \${eventType} event for task \${(data as any)?.id}\`, {
+        log.error(`Failed to handle ${eventType} event for task ${(data as any)?.id}`, {
           error,
           taskID: (data as any)?.id,
         })
@@ -78,13 +82,13 @@ async function handleTaskEvent(eventType: string, task: BackgroundTask.Info) {
   const notificationEvent = eventMapping[eventType as keyof typeof eventMapping]
 
   if (!notificationEvent) {
-    log.warn(\`Unknown event type: \${eventType}\`)
+    log.warn(`Unknown event type: ${eventType}`)
     return
   }
 
   // Parent context MUST be present (set when task was created via Task tool)
   if (!task.sessionID || !task.messageID) {
-    log.debug(\`Task \${task.id} has no parent context, skipping notification\`, {
+    log.debug(`Task ${task.id} has no parent context, skipping notification`, {
       taskID: task.id,
       event: notificationEvent,
       hasSessionID: !!task.sessionID,
@@ -104,7 +108,7 @@ async function handleTaskEvent(eventType: string, task: BackgroundTask.Info) {
     details.message = task.description
   }
 
-  log.debug(\`Emitting \${notificationEvent} notification for task \${task.id}\`, {
+  log.debug(`Emitting ${notificationEvent} notification for task ${task.id}`, {
     taskID: task.id,
     sessionID: task.sessionID,
     messageID: task.messageID,
@@ -120,3 +124,4 @@ async function handleTaskEvent(eventType: string, task: BackgroundTask.Info) {
     details: Object.keys(details).length > 0 ? details : undefined,
   })
 }
+}  // End TaskNotifier namespace
