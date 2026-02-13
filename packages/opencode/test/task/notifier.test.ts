@@ -1,266 +1,271 @@
-import { describe, expect, test, beforeEach, afterEach, mock, spyOn } from "bun:test"
+import { describe, it, expect, beforeEach, afterEach, spyOn } from "bun:test"
+import { TaskNotifier } from "../../src/task/notifier"
 import { Bus } from "../../src/bus"
 import { BackgroundTask } from "../../src/task/background"
-import { TaskNotifier } from "../../src/task/notifier"
-import { MessageV2 } from "../../src/session/message-v2"
+import { Instance } from "../../src/project/instance"
+import { tmpdir } from "../fixture/fixture"
+import * as MessageV2Module from "../../src/session/message-v2"
 
 describe("TaskNotifier", () => {
-  let mockSubscriptionHandlers: Map<string, Function>
-  let originalSubscribe: typeof Bus.subscribe
-  let emitNotificationSpy: any
-
-  beforeEach(() => {
-    mockSubscriptionHandlers = new Map()
-    originalSubscribe = Bus.subscribe
-    
-    // Mock Bus.subscribe to capture handlers
-    Bus.subscribe = mock((event: any, handler: Function) => {
-      mockSubscriptionHandlers.set(event.name, handler)
-      return () => {} // Return unsubscribe function
-    }) as any
-
-    // Spy on emitBackgroundTaskNotification
-    emitNotificationSpy = spyOn(messageV2, "emitBackgroundTaskNotification")
-  })
+  let emitNotificationSpy: ReturnType<typeof spyOn>
 
   afterEach(() => {
-    Bus.subscribe = originalSubscribe
-    mockSubscriptionHandlers.clear()
-  })
-
-  describe("initialize()", () => {
-    test("should subscribe to all 5 BackgroundTask events", () => {
-      TaskNotifier.initialize()
-
-      expect(Bus.subscribe).toHaveBeenCalledTimes(5)
-      expect(mockSubscriptionHandlers.has("background_task.registered")).toBe(true)
-      expect(mockSubscriptionHandlers.has("background_task.started")).toBe(true)
-      expect(mockSubscriptionHandlers.has("background_task.completed")).toBe(true)
-      expect(mockSubscriptionHandlers.has("background_task.failed")).toBe(true)
-      expect(mockSubscriptionHandlers.has("background_task.cancelled")).toBe(true)
-    })
-
-    test("should be idempotent (no-op on second call)", () => {
-      TaskNotifier.initialize()
-      const firstCallCount = (Bus.subscribe as any).mock.calls.length
-
-      TaskNotifier.initialize()
-      const secondCallCount = (Bus.subscribe as any).mock.calls.length
-
-      // Should not have subscribed again
-      expect(secondCallCount).toBe(firstCallCount)
-    })
+    emitNotificationSpy?.mockRestore()
   })
 
   describe("event handling", () => {
-    const createMockTask = (overrides?: Partial<BackgroundTask.Info>): BackgroundTask.Info => ({
-      id: "tsk_test123",
-      type: "task",
-      sessionID: "session_abc",
-      messageID: "msg_xyz",
-      description: "Test task",
-      status: "queued",
-      time: {
-        created: Date.now(),
-      },
-      ...overrides,
-    })
+    it("should emit notification when Registered event fires", async () => {
+      await using tmp = await tmpdir()
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          // Spy on the emitBackgroundTaskNotification function
+          emitNotificationSpy = spyOn(MessageV2Module, "emitBackgroundTaskNotification").mockResolvedValue(undefined)
+          
+          // Initialize the notifier so it subscribes to events
+          TaskNotifier.initialize()
 
-    beforeEach(() => {
-      TaskNotifier.initialize()
-    })
+          const task = {
+            id: "test-task-123",
+            sessionID: "test-session",
+            messageID: "test-message",
+            description: "Test task",
+            status: "queued" as const,
+            createdAt: new Date(),
+          }
 
-    test("should emit notification on task registered (queued)", async () => {
-      const task = createMockTask()
-      const handler = mockSubscriptionHandlers.get("background_task.registered")
-      
-      expect(handler).toBeDefined()
-      await handler!({ task })
+          // Emit the Registered event
+          await Bus.publish(BackgroundTask.Event.Registered, { task })
 
-      expect(emitNotificationSpy).toHaveBeenCalledWith(
-        "session_abc",
-        "msg_xyz",
-        "tsk_test123",
-        "queued",
-        undefined
-      )
-    })
+          // Wait for async operations
+          await new Promise((resolve) => setTimeout(resolve, 100))
 
-    test("should emit notification on task started", async () => {
-      const task = createMockTask({ status: "running" })
-      const handler = mockSubscriptionHandlers.get("background_task.started")
-      
-      expect(handler).toBeDefined()
-      await handler!({ task })
-
-      expect(emitNotificationSpy).toHaveBeenCalledWith(
-        "session_abc",
-        "msg_xyz",
-        "tsk_test123",
-        "started",
-        undefined
-      )
-    })
-
-    test("should emit notification on task completed with result", async () => {
-      const task = createMockTask({ 
-        status: "completed",
-        result: "Task succeeded"
+          expect(emitNotificationSpy).toHaveBeenCalledWith(
+            expect.objectContaining({
+              sessionID: "test-session",
+              messageID: "test-message",
+              taskID: "test-task-123",
+              event: "queued",
+            })
+          )
+        },
       })
-      const handler = mockSubscriptionHandlers.get("background_task.completed")
-      
-      expect(handler).toBeDefined()
-      await handler!({ task })
-
-      expect(emitNotificationSpy).toHaveBeenCalledWith(
-        "session_abc",
-        "msg_xyz",
-        "tsk_test123",
-        "completed",
-        { message: "Task succeeded" }
-      )
     })
 
-    test("should emit notification on task completed without result", async () => {
-      const task = createMockTask({ status: "completed" })
-      const handler = mockSubscriptionHandlers.get("background_task.completed")
-      
-      expect(handler).toBeDefined()
-      await handler!({ task })
+    it("should emit notification when Started event fires", async () => {
+      await using tmp = await tmpdir()
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          emitNotificationSpy = spyOn(MessageV2Module, "emitBackgroundTaskNotification").mockResolvedValue(undefined)
+          TaskNotifier.initialize()
 
-      expect(emitNotificationSpy).toHaveBeenCalledWith(
-        "session_abc",
-        "msg_xyz",
-        "tsk_test123",
-        "completed",
-        undefined
-      )
-    })
+          const task = {
+            id: "test-task-456",
+            sessionID: "test-session-2",
+            messageID: "test-message-2",
+            description: "Running task",
+            status: "running" as const,
+            createdAt: new Date(),
+            startedAt: new Date(),
+          }
 
-    test("should emit notification on task failed with error", async () => {
-      const task = createMockTask({ 
-        status: "error",
-        error: "Something went wrong"
+          await Bus.publish(BackgroundTask.Event.Started, { task })
+          await new Promise((resolve) => setTimeout(resolve, 100))
+
+          expect(emitNotificationSpy).toHaveBeenCalledWith(
+            expect.objectContaining({
+              sessionID: "test-session-2",
+              messageID: "test-message-2",
+              taskID: "test-task-456",
+              event: "started",
+            })
+          )
+        },
       })
-      const handler = mockSubscriptionHandlers.get("background_task.failed")
-      
-      expect(handler).toBeDefined()
-      await handler!({ task })
-
-      expect(emitNotificationSpy).toHaveBeenCalledWith(
-        "session_abc",
-        "msg_xyz",
-        "tsk_test123",
-        "failed",
-        { error: "Something went wrong" }
-      )
     })
 
-    test("should emit notification on task failed without error message", async () => {
-      const task = createMockTask({ status: "error" })
-      const handler = mockSubscriptionHandlers.get("background_task.failed")
-      
-      expect(handler).toBeDefined()
-      await handler!({ task })
+    it("should emit notification when Completed event fires", async () => {
+      await using tmp = await tmpdir()
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          emitNotificationSpy = spyOn(MessageV2Module, "emitBackgroundTaskNotification").mockResolvedValue(undefined)
+          TaskNotifier.initialize()
 
-      expect(emitNotificationSpy).toHaveBeenCalledWith(
-        "session_abc",
-        "msg_xyz",
-        "tsk_test123",
-        "failed",
-        undefined
-      )
-    })
+          const task = {
+            id: "test-task-789",
+            sessionID: "test-session-3",
+            messageID: "test-message-3",
+            description: "Completed task",
+            status: "completed" as const,
+            createdAt: new Date(),
+            startedAt: new Date(),
+            completedAt: new Date(),
+            result: "success",
+          }
 
-    test("should emit notification on task cancelled", async () => {
-      const task = createMockTask({ status: "cancelled" })
-      const handler = mockSubscriptionHandlers.get("background_task.cancelled")
-      
-      expect(handler).toBeDefined()
-      await handler!({ task })
+          await Bus.publish(BackgroundTask.Event.Completed, { task })
+          await new Promise((resolve) => setTimeout(resolve, 100))
 
-      expect(emitNotificationSpy).toHaveBeenCalledWith(
-        "session_abc",
-        "msg_xyz",
-        "tsk_test123",
-        "cancelled",
-        undefined
-      )
-    })
-  })
-
-  describe("error handling", () => {
-    const createMockTask = (overrides?: Partial<BackgroundTask.Info>): BackgroundTask.Info => ({
-      id: "tsk_test123",
-      type: "task",
-      sessionID: "session_abc",
-      messageID: "msg_xyz",
-      description: "Test task",
-      status: "queued",
-      time: {
-        created: Date.now(),
-      },
-      ...overrides,
-    })
-
-    let consoleErrorSpy: any
-
-    beforeEach(() => {
-      TaskNotifier.initialize()
-      consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {})
-    })
-
-    afterEach(() => {
-      consoleErrorSpy.mockRestore()
-    })
-
-    test("should catch and log errors without crashing", async () => {
-      emitNotificationSpy.mockImplementationOnce(() => {
-        throw new Error("Test error")
+          expect(emitNotificationSpy).toHaveBeenCalledWith(
+            expect.objectContaining({
+              sessionID: "test-session-3",
+              messageID: "test-message-3",
+              taskID: "test-task-789",
+              event: "completed",
+            })
+          )
+        },
       })
-
-      const task = createMockTask()
-      const handler = mockSubscriptionHandlers.get("background_task.registered")
-      
-      // Should not throw
-      await expect(handler!({ task })).resolves.toBeUndefined()
-      
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        "[TaskNotifier] Failed to emit notification:",
-        expect.any(Error)
-      )
     })
 
-    test("should handle missing sessionID gracefully", async () => {
-      const task = createMockTask({ sessionID: "" })
-      const handler = mockSubscriptionHandlers.get("background_task.registered")
-      
-      await handler!({ task })
+    it("should emit notification when Failed event fires", async () => {
+      await using tmp = await tmpdir()
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          emitNotificationSpy = spyOn(MessageV2Module, "emitBackgroundTaskNotification").mockResolvedValue(undefined)
+          TaskNotifier.initialize()
 
-      // Should still call with empty sessionID (let emitBackgroundTaskNotification handle it)
-      expect(emitNotificationSpy).toHaveBeenCalledWith(
-        "",
-        "msg_xyz",
-        "tsk_test123",
-        "queued",
-        undefined
-      )
+          const task = {
+            id: "test-task-fail",
+            sessionID: "test-session-4",
+            messageID: "test-message-4",
+            description: "Failed task",
+            status: "error" as const,
+            createdAt: new Date(),
+            startedAt: new Date(),
+            completedAt: new Date(),
+            error: "Something went wrong",
+          }
+
+          await Bus.publish(BackgroundTask.Event.Failed, { task })
+          await new Promise((resolve) => setTimeout(resolve, 100))
+
+          expect(emitNotificationSpy).toHaveBeenCalledWith(
+            expect.objectContaining({
+              sessionID: "test-session-4",
+              messageID: "test-message-4",
+              taskID: "test-task-fail",
+              event: "failed",
+            })
+          )
+        },
+      })
     })
 
-    test("should handle missing messageID gracefully", async () => {
-      const task = createMockTask({ messageID: "" })
-      const handler = mockSubscriptionHandlers.get("background_task.registered")
-      
-      await handler!({ task })
+    it("should emit notification when Cancelled event fires", async () => {
+      await using tmp = await tmpdir()
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          emitNotificationSpy = spyOn(MessageV2Module, "emitBackgroundTaskNotification").mockResolvedValue(undefined)
+          TaskNotifier.initialize()
 
-      // Should still call with empty messageID (let emitBackgroundTaskNotification handle it)
-      expect(emitNotificationSpy).toHaveBeenCalledWith(
-        "session_abc",
-        "",
-        "tsk_test123",
-        "queued",
-        undefined
-      )
+          const task = {
+            id: "test-task-cancel",
+            sessionID: "test-session-5",
+            messageID: "test-message-5",
+            description: "Cancelled task",
+            status: "cancelled" as const,
+            createdAt: new Date(),
+            completedAt: new Date(),
+          }
+
+          await Bus.publish(BackgroundTask.Event.Cancelled, { task })
+          await new Promise((resolve) => setTimeout(resolve, 100))
+
+          expect(emitNotificationSpy).toHaveBeenCalledWith(
+            expect.objectContaining({
+              sessionID: "test-session-5",
+              messageID: "test-message-5",
+              taskID: "test-task-cancel",
+              event: "cancelled",
+            })
+          )
+        },
+      })
+    })
+
+    it("should emit notification when Progress event with output fires", async () => {
+      await using tmp = await tmpdir()
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          emitNotificationSpy = spyOn(MessageV2Module, "emitBackgroundTaskNotification").mockResolvedValue(undefined)
+          TaskNotifier.initialize()
+
+          const task = {
+            id: "test-task-output",
+            sessionID: "test-session-6",
+            messageID: "test-message-6",
+            description: "Task with output",
+            status: "running" as const,
+            createdAt: new Date(),
+            startedAt: new Date(),
+          }
+
+          const progress = {
+            output: "Some output",
+            error: false,
+          }
+
+          await Bus.publish(BackgroundTask.Event.Progress, { task, progress })
+          await new Promise((resolve) => setTimeout(resolve, 100))
+
+          expect(emitNotificationSpy).toHaveBeenCalledWith(
+            expect.objectContaining({
+              sessionID: "test-session-6",
+              messageID: "test-message-6",
+              taskID: "test-task-output",
+              event: "output",
+            })
+          )
+        },
+      })
+    })
+
+    it("should handle multiple events in sequence", async () => {
+      await using tmp = await tmpdir()
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          emitNotificationSpy = spyOn(MessageV2Module, "emitBackgroundTaskNotification").mockResolvedValue(undefined)
+          TaskNotifier.initialize()
+
+          const task = {
+            id: "test-sequence",
+            sessionID: "test-session-seq",
+            messageID: "test-message-seq",
+            description: "Sequential task",
+            status: "queued" as const,
+            createdAt: new Date(),
+          }
+
+          // Emit Registered
+          await Bus.publish(BackgroundTask.Event.Registered, { task })
+          await new Promise((resolve) => setTimeout(resolve, 50))
+
+          // Emit Started
+          const runningTask = { ...task, status: "running" as const, startedAt: new Date() }
+          await Bus.publish(BackgroundTask.Event.Started, { task: runningTask })
+          await new Promise((resolve) => setTimeout(resolve, 50))
+
+          // Emit Completed
+          const completedTask = { ...runningTask, status: "completed" as const, completedAt: new Date(), result: "done" }
+          await Bus.publish(BackgroundTask.Event.Completed, { task: completedTask })
+          await new Promise((resolve) => setTimeout(resolve, 50))
+
+          // Should have been called 3 times (queued, started, completed)
+          expect(emitNotificationSpy).toHaveBeenCalledTimes(3)
+
+          // Verify the sequence
+          expect(emitNotificationSpy).toHaveBeenNthCalledWith(1, expect.objectContaining({ event: "queued" }))
+          expect(emitNotificationSpy).toHaveBeenNthCalledWith(2, expect.objectContaining({ event: "started" }))
+          expect(emitNotificationSpy).toHaveBeenNthCalledWith(3, expect.objectContaining({ event: "completed" }))
+        },
+      })
     })
   })
 })

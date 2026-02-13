@@ -16,14 +16,14 @@ import { Log } from "@/util/log"
 const log = Log.create({ service: "task-notifier" })
 
 /**
- * Maps BackgroundTask.Event to AgentNotificationPart event types
+ * Maps BackgroundTask.Event types to AgentNotificationPart event types
  */
-const eventMapping = {
-  [BackgroundTask.Event.Queued]: "queued",
-  [BackgroundTask.Event.Started]: "started",
-  [BackgroundTask.Event.Completed]: "completed",
-  [BackgroundTask.Event.Failed]: "failed",
-  [BackgroundTask.Event.Cancelled]: "cancelled",
+const eventMapping: Record<string, string> = {
+  [BackgroundTask.Event.Registered.type]: "queued",
+  [BackgroundTask.Event.Started.type]: "started",
+  [BackgroundTask.Event.Completed.type]: "completed",
+  [BackgroundTask.Event.Failed.type]: "failed",
+  [BackgroundTask.Event.Cancelled.type]: "cancelled",
 } as const
 
 /**
@@ -48,8 +48,9 @@ export namespace TaskNotifier {
 
   // Subscribe to all task lifecycle events
   const events = [
-    BackgroundTask.Event.Queued,
+    BackgroundTask.Event.Registered,
     BackgroundTask.Event.Started,
+    BackgroundTask.Event.Progress,
     BackgroundTask.Event.Completed,
     BackgroundTask.Event.Failed,
     BackgroundTask.Event.Cancelled,
@@ -58,11 +59,16 @@ export namespace TaskNotifier {
   for (const eventType of events) {
     Bus.subscribe(eventType, async (data) => {
       try {
-        await handleTaskEvent(eventType, data as BackgroundTask.Info)
+        // Progress events have a different structure
+        if (eventType === BackgroundTask.Event.Progress) {
+          await handleProgressEvent(data as { task: BackgroundTask.Info; progress: any })
+        } else {
+          await handleTaskEvent(eventType.type, (data as { task: BackgroundTask.Info }).task)
+        }
       } catch (error) {
-        log.error(`Failed to handle ${eventType} event for task ${(data as any)?.id}`, {
+        log.error(`Failed to handle ${eventType.type} event`, {
           error,
-          taskID: (data as any)?.id,
+          data,
         })
       }
     })
@@ -122,6 +128,40 @@ async function handleTaskEvent(eventType: string, task: BackgroundTask.Info) {
     taskID: task.id,
     event: notificationEvent,
     details: Object.keys(details).length > 0 ? details : undefined,
+  })
+}
+
+/**
+ * Handles a task progress event with output
+ */
+async function handleProgressEvent(data: { task: BackgroundTask.Info; progress: any }) {
+  const { task, progress } = data
+
+  // Only emit notifications for progress events with output
+  if (!progress.output) {
+    return
+  }
+
+  // Parent context MUST be present
+  if (!task.sessionID || !task.messageID) {
+    return
+  }
+
+  log.debug(`Emitting output notification for task ${task.id}`, {
+    taskID: task.id,
+    sessionID: task.sessionID,
+    messageID: task.messageID,
+  })
+
+  await emitBackgroundTaskNotification({
+    sessionID: task.sessionID,
+    messageID: task.messageID,
+    taskID: task.id,
+    event: "output",
+    details: {
+      message: progress.output,
+      error: progress.error ? "true" : undefined,
+    },
   })
 }
 }  // End TaskNotifier namespace
