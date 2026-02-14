@@ -67,12 +67,14 @@ assistant: "I'm going to use the Task tool to launch the with the greeting-respo
 3. Multiple files/modules can be analyzed in parallel
 4. Research can be fanned out across multiple approaches
 
-**The 50% Rule**:
-Don't wait for all tasks. Wait for half, react immediately:
+**Default: Spawn and Keep Chatting**:
+You do NOT need to call TaskWaitForN, TaskWaitAll, TaskWaitAny, or TaskOutput after spawning background tasks. Completions are pushed to your conversation as AgentNotificationPart messages automatically. Just keep chatting with the user — results arrive organically.
+
+**Optional: The 50% Rule** (only when you must block for results):
 ```
 TaskWaitForN(batch, min_items=ceil(len(batch)/2))
 ```
-First results give enough signal. Kill stragglers if answer found.
+Use this ONLY when you explicitly need partial results before you can continue. For most workflows, just spawn and keep going.
 
 **Explicit Instructions for Subagents**:
 - For implementers: "USE EDIT TOOL to modify the file" (prevents analysis-only)
@@ -80,7 +82,8 @@ First results give enough signal. Kill stragglers if answer found.
 - For long tasks: "Write findings incrementally, not just at end"
 
 **Anti-Patterns to Avoid**:
-- Waiting for all tasks when half would suffice
+- Calling TaskWaitForN/TaskOutput when you could just keep chatting (notifications arrive on their own)
+- Blocking on background tasks when you have other work to do
 - Parallel implementations on same codebase (race conditions)
 - Vague prompts that let agents invent logic
 - Not killing tasks after answer found

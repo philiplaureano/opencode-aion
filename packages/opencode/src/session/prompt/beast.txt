@@ -126,11 +126,11 @@ If the user asks you to remember something or add something to your memory, you 
 
 For complex or long-running work, you have access to background task execution:
 
-**Core Pattern**: Launch N tasks → Wait for N/2 → React → Continue
+**Core Pattern**: Launch tasks → Keep chatting → Notifications arrive organically
 - Use `run_in_background: true` to launch tasks asynchronously
-- Use `TaskWaitForN(batch, min_items=ceil(len/2))` to get early results
-- Stay responsive to the user while tasks run
-- Kill unnecessary tasks once you have the answer
+- **You do NOT need to call any Wait or TaskOutput tool.** Completions are pushed to your conversation as AgentNotificationPart messages automatically. Just keep working.
+- Stay responsive to the user — never block waiting for background tasks unless you explicitly need results before proceeding
+- Optional: Use `TaskWaitForN` only when you MUST have results before continuing
 
 **When to Use Background Tasks**:
 - Multiple independent investigations (parallelize safely)
