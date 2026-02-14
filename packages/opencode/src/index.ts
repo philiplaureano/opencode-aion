@@ -24,7 +24,7 @@ import { TuiThreadCommand } from "./cli/cmd/tui/thread"
 import { AcpCommand } from "./cli/cmd/acp"
 import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
-import { initialize as initTaskNotifier } from "./task/notifier"
+import { TaskNotifier } from "./task/notifier"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
 
@@ -77,7 +77,7 @@ const cli = yargs(hideBin(process.argv))
     })
 
     // Initialize TaskNotifier for async callbacks
-    initTaskNotifier()
+    TaskNotifier.initialize()
   })
   .usage("\n" + UI.logo())
   .completion("completion", "generate shell completion script")
